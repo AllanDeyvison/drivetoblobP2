@@ -22,10 +22,66 @@ def protect(fn):
     return wrapped
 
 def drive():
-    scopes = ['https://www.googleapis.com/auth/drive.readonly']
-    raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
-    creds = service_account.Credentials.from_service_account_info(json.loads(raw), scopes=scopes) if raw else service_account.Credentials.from_service_account_file(os.environ['GOOGLE_APPLICATION_CREDENTIALS'], scopes=scopes)
-    return build('drive', 'v3', credentials=creds, cache_discovery=False)
+    scopes = [
+        'https://www.googleapis.com/auth/drive.readonly'
+    ]
+
+    raw = os.getenv('GOOGLE_CREDENTIALS_JSON', '').strip()
+
+    if raw:
+        app.logger.info(
+            '[GOOGLE] Utilizando credenciais da variavel de ambiente'
+        )
+
+        info = json.loads(raw)
+
+        info['private_key'] = info['private_key'].replace(
+            '\\n', '\n'
+        )
+
+        creds = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=scopes
+        )
+
+    else:
+        app.logger.info(
+            '[GOOGLE] Tentando utilizar arquivo local'
+        )
+
+        path = os.getenv(
+            'GOOGLE_APPLICATION_CREDENTIALS',
+            'credentials.json'
+        )
+
+        if not os.path.isfile(path):
+            raise RuntimeError(
+                'Credenciais ausentes. Configure GOOGLE_CREDENTIALS_JSON.'
+            )
+
+        creds = service_account.Credentials.from_service_account_file(
+            path,
+            scopes=scopes
+        )
+
+    app.logger.info('[GOOGLE] Credenciais carregadas')
+
+    client = build(
+        'drive',
+        'v3',
+        credentials=creds,
+        cache_discovery=False
+    )
+
+    app.logger.info('[GOOGLE] Cliente Drive criado')
+
+    return client
+
+# def drive():
+#     scopes = ['https://www.googleapis.com/auth/drive.readonly']
+#     raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
+#     creds = service_account.Credentials.from_service_account_info(json.loads(raw), scopes=scopes) if raw else service_account.Credentials.from_service_account_file(os.environ['GOOGLE_APPLICATION_CREDENTIALS'], scopes=scopes)
+#     return build('drive', 'v3', credentials=creds, cache_discovery=False)
 
 # def container():
 #     return BlobServiceClient.from_connection_string(os.environ['AZURE_STORAGE_CONNECTION_STRING']).get_container_client(os.environ['AZURE_CONTAINER_NAME'])
@@ -115,10 +171,41 @@ def index(): return render_template('index.html')
 @app.get('/api/origem')
 @protect
 def origem():
-    try: return jsonify(list_source(drive()))
+    try:
+        app.logger.info('[GOOGLE] Iniciando listagem')
+
+        client = drive()
+        files = list_source(client)
+
+        app.logger.info(
+            '[GOOGLE] %s arquivos encontrados',
+            len(files)
+        )
+
+        return jsonify(files)
+
     except Exception as e:
-        app.logger.error('Erro origem: %s', type(e).__name__)
-        return jsonify(error='Falha ao listar origem. Confira configuracao e permissoes.'), 502
+        app.logger.error(
+            '[GOOGLE] Tipo do erro: %s',
+            type(e).__name__
+        )
+
+        if isinstance(e, OSError):
+            app.logger.error(
+                '[GOOGLE] Codigo do erro de sistema: %s',
+                e.errno
+            )
+
+        return jsonify(
+            error='Falha ao listar origem. Confira os logs.'
+        ), 502
+# @app.get('/api/origem')
+# @protect
+# def origem():
+#     try: return jsonify(list_source(drive()))
+#     except Exception as e:
+#         app.logger.error('Erro origem: %s', type(e).__name__)
+#         return jsonify(error='Falha ao listar origem. Confira configuracao e permissoes.'), 502
 
 @app.get('/api/destino')
 @protect

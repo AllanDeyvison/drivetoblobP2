@@ -167,30 +167,27 @@ def index(): return render_template('index.html')
 @app.get('/api/origem')
 @protect
 def origem():
+    etapa = 'autenticacao'
+
     try:
-        app.logger.info('[GOOGLE] Iniciando listagem')
+        print("[GOOGLE V3] Iniciando listagem")
 
         client = drive()
+
+        etapa = 'listagem'
         files = list_source(client)
 
-        app.logger.info(
-            '[GOOGLE] %s arquivos encontrados',
-            len(files)
-        )
+        print(f"[GOOGLE] Arquivos encontrados: {len(files)}")
 
         return jsonify(files)
 
     except Exception as e:
         app.logger.error(
-            '[GOOGLE] Tipo do erro: %s',
-            type(e).__name__
+            "GOOGLE V3 | Etapa: %s | Erro: %s | Errno: %s",
+            etapa,
+            type(e).__name__,
+            getattr(e, 'errno', None)
         )
-
-        if isinstance(e, OSError):
-            app.logger.error(
-                '[GOOGLE] Codigo do erro de sistema: %s',
-                e.errno
-            )
 
         return jsonify(
             error='Falha ao listar origem. Confira os logs.'

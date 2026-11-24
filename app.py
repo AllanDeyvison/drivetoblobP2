@@ -1,4 +1,5 @@
 import os, json, io, logging, hmac
+import base64
 from functools import wraps
 from flask import Flask, jsonify, render_template, request, Response
 from dotenv import load_dotenv
@@ -26,17 +27,14 @@ def drive():
         'https://www.googleapis.com/auth/drive.readonly'
     ]
 
-    raw = os.getenv('GOOGLE_CREDENTIALS_JSON', '').strip()
+    raw_base64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
+    raw_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
 
-    if raw:
-        app.logger.info(
-            '[GOOGLE] Utilizando credenciais da variavel de ambiente'
-        )
+    if raw_base64:
+        print("[GOOGLE] Utilizando credenciais Base64")
 
-        info = json.loads(raw)
-
-        info['private_key'] = info['private_key'].replace(
-            '\\n', '\n'
+        info = json.loads(
+            base64.b64decode(raw_base64).decode('utf-8')
         )
 
         creds = service_account.Credentials.from_service_account_info(
@@ -44,27 +42,26 @@ def drive():
             scopes=scopes
         )
 
-    else:
-        app.logger.info(
-            '[GOOGLE] Tentando utilizar arquivo local'
-        )
+    elif raw_json:
+        print("[GOOGLE] Utilizando credenciais JSON")
 
-        path = os.getenv(
-            'GOOGLE_APPLICATION_CREDENTIALS',
-            'credentials.json'
-        )
-
-        if not os.path.isfile(path):
-            raise RuntimeError(
-                'Credenciais ausentes. Configure GOOGLE_CREDENTIALS_JSON.'
-            )
-
-        creds = service_account.Credentials.from_service_account_file(
-            path,
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(raw_json),
             scopes=scopes
         )
 
-    app.logger.info('[GOOGLE] Credenciais carregadas')
+    else:
+        print("[GOOGLE] Utilizando arquivo local")
+
+        creds = service_account.Credentials.from_service_account_file(
+            os.getenv(
+                'GOOGLE_APPLICATION_CREDENTIALS',
+                'credentials.json'
+            ),
+            scopes=scopes
+        )
+
+    print("[GOOGLE] Credenciais carregadas")
 
     client = build(
         'drive',
@@ -73,10 +70,9 @@ def drive():
         cache_discovery=False
     )
 
-    app.logger.info('[GOOGLE] Cliente Drive criado')
+    print("[GOOGLE] Cliente criado")
 
     return client
-
 # def drive():
 #     scopes = ['https://www.googleapis.com/auth/drive.readonly']
 #     raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
